@@ -1,40 +1,16 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Nethereum.Hex.HexTypes;
 using Nethereum.Web3;
 using Nethereum.Web3.Accounts;
 
 namespace BlockchainConsole;
 class Program
 {
-    private static IConfigurationRoot config = new ConfigurationBuilder().AddUserSecrets<Program>().Build();
-    private static Account _account = new Account(config["PrivateKey"]);
-    private static Web3 _web3 = new Web3("https://rpc.sepolia.org/"); // Sepolia testnet
+    private static readonly IConfigurationRoot config = new ConfigurationBuilder().AddUserSecrets<Program>().Build();
+    private static readonly Account _account = new(config["PrivateKey"]);
+    private static readonly Web3 _web3 = new("wss://ethereum-sepolia-rpc.publicnode.com"); // Sepolia testnet
     private const string Contract = "0x4446BcEb26a36FCe0dEDf6E54928f994A235A1af"; // Contract address
-    static async Task Main(string[] args)
-    {
-        Console.WriteLine("An Adress: " + _account.Address);
-        try
-        {
-            var balance = await GetAccountBalanceAsync();
-            var mood = await GetMoodAsync();
-            Console.WriteLine("ETH Balance: " + balance);
-            Console.WriteLine("Mood: " + mood);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("An exception occurred: " + ex.Message);
-        }
-    }
-
-    static async Task<decimal> GetAccountBalanceAsync()
-    {
-        var balance = await _web3.Eth.GetBalance.SendRequestAsync(_account.Address);
-        var etherAmount = Web3.Convert.FromWei(balance.Value);
-        return etherAmount;
-    }
-
-    static async Task<string> GetMoodAsync()
-    {
-        var contractAbi = @"[{
+    private const string CONTRACT_ABI = @"[{
                 'inputs': [],
                 'name': 'getMood',
                 'outputs': [{
@@ -57,16 +33,66 @@ class Program
                 'type': 'function'
             }
         ]";
-        var contract = _web3.Eth.GetContract(contractAbi, Contract);
+
+    static async Task Main(string[] args)
+    {
+        Console.WriteLine("An Adress: " + _account.Address);
+        try
+        {
+            var balance = await GetAccountBalanceAsync();
+            Console.WriteLine($"ETH Balance: {balance} ETH");
+            // await SetMoodAsync();
+            var mood = await GetMoodAsync();
+            Console.WriteLine("Mood: " + mood);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("An exception occurred: " + ex.Message);
+        }
+    }
+
+    static async Task<decimal> GetAccountBalanceAsync()
+    {
+        var balance = await _web3.Eth.GetBalance.SendRequestAsync(_account.Address);
+        var etherAmount = Web3.Convert.FromWei(balance.Value);
+        return etherAmount;
+    }
+
+    static async Task<string> GetMoodAsync()
+    {
+        var contract = _web3.Eth.GetContract(CONTRACT_ABI, Contract);
         var function = contract.GetFunction("getMood");
         var result = await function.CallAsync<string>();
         return result;
     }
 
+    static async Task SetMoodAsync()
+    {
+        // Set the transaction manager
+        _web3.TransactionManager = new AccountSignerTransactionManager(_web3.Client, _account);
+
+        // Get the contract and function
+        var contract = _web3.Eth.GetContract(CONTRACT_ABI, Contract);
+        var function = contract.GetFunction("setMood");
+
+        // Get the current gas price
+        var gasPrice = await _web3.Eth.GasPrice.SendRequestAsync();
+        Console.WriteLine($"Gas Price: {Web3.Convert.FromWei(gasPrice)} ETH");
+
+        // Get a more accurate gas estimate with a buffer
+        var gasLimit = await function.EstimateGasAsync(_account.Address, gasPrice, null, "Let's try again");
+        Console.WriteLine($"Gas Limit: {gasLimit.Value} units");
+
+        // Send the transaction and wait for the receipt
+        var transactionReceipt = await function.SendTransactionAndWaitForReceiptAsync(_account.Address, gasLimit, null, null, "Let's try again");
+        Console.WriteLine($"Transaction status : {transactionReceipt.Status.Value}");
+        Console.WriteLine($"Transaction hash: {transactionReceipt.TransactionHash}");
+    }
+
     static async Task SendEthAsync(decimal amountInEther)
     {
-        var recipientAddress = "0x47E0bBBD519F3117560E2b0Ff72e248BF8915008";
         _web3.TransactionManager = new AccountSignerTransactionManager(_web3.Client, _account);
+        var recipientAddress = "0x47E0bBBD519F3117560E2b0Ff72e248BF8915008";
         var transaction = await _web3.Eth.GetEtherTransferService().TransferEtherAndWaitForReceiptAsync(recipientAddress, amountInEther);
         var receipt = await _web3.Eth.Transactions.GetTransactionReceipt.SendRequestAsync(transaction.TransactionHash);
         Console.WriteLine($"Transaction status: {receipt.Status.Value == 1}");
