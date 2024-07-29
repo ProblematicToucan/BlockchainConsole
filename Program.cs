@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Configuration;
-using Nethereum.Hex.HexTypes;
 using Nethereum.Web3;
 using Nethereum.Web3.Accounts;
 
@@ -8,7 +7,7 @@ class Program
 {
     private static readonly IConfigurationRoot config = new ConfigurationBuilder().AddUserSecrets<Program>().Build();
     private static readonly Account _account = new(config["PrivateKey"]);
-    private static readonly Web3 _web3 = new("wss://ethereum-sepolia-rpc.publicnode.com"); // Sepolia testnet
+    private static readonly Web3 _web3 = new(_account, "wss://ethereum-sepolia-rpc.publicnode.com"); // Sepolia testnet
     private const string Contract = "0x4446BcEb26a36FCe0dEDf6E54928f994A235A1af"; // Contract address
     private const string CONTRACT_ABI = @"[{
                 'inputs': [],
@@ -33,7 +32,6 @@ class Program
                 'type': 'function'
             }
         ]";
-
     static async Task Main(string[] args)
     {
         Console.WriteLine("An Adress: " + _account.Address);
@@ -68,9 +66,6 @@ class Program
 
     static async Task SetMoodAsync()
     {
-        // Set the transaction manager
-        _web3.TransactionManager = new AccountSignerTransactionManager(_web3.Client, _account);
-
         // Get the contract and function
         var contract = _web3.Eth.GetContract(CONTRACT_ABI, Contract);
         var function = contract.GetFunction("setMood");
@@ -80,11 +75,11 @@ class Program
         Console.WriteLine($"Gas Price: {Web3.Convert.FromWei(gasPrice)} ETH");
 
         // Get a more accurate gas estimate with a buffer
-        var gasLimit = await function.EstimateGasAsync(_account.Address, gasPrice, null, "Let's try again");
+        var gasLimit = await function.EstimateGasAsync(_account.Address, gasPrice, null, "Hee hee...");
         Console.WriteLine($"Gas Limit: {gasLimit.Value} units");
 
         // Send the transaction and wait for the receipt
-        var transactionReceipt = await function.SendTransactionAndWaitForReceiptAsync(_account.Address, gasLimit, null, null, "Let's try again");
+        var transactionReceipt = await function.SendTransactionAndWaitForReceiptAsync(_account.Address, gasLimit, null, null, "Hee hee...");
         Console.WriteLine($"Transaction status : {transactionReceipt.Status.Value}");
         Console.WriteLine($"Transaction hash: {transactionReceipt.TransactionHash}");
     }
